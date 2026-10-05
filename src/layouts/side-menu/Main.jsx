@@ -1,3 +1,5 @@
+import { useRecoilState } from "recoil";
+import { supabase } from "@/lib/supabase";
 import { Transition } from "react-transition-group";
 import { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -17,9 +19,43 @@ function Main() {
   const navigate = useNavigate();
   const location = useLocation();
   const [formattedMenu, setFormattedMenu] = useState([]);
-  const sideMenuStore = useRecoilValue(useSideMenuStore);
+  const [sideMenuStore, setSideMenuStore] = useRecoilState(
+    useSideMenuStore
+  );
   const sideMenu = () => nestedMenu($h.toRaw(sideMenuStore.menu), location);
+  useEffect(() => {
+    const loadUserMenu = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
+      if (!user) return;
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role, organization_id")
+        .eq("id", user.id)
+        .single();
+
+      if (error) {
+        console.error("Failed to load user profile:", error);
+        return;
+      }
+
+      const isPlatformOwner =
+        profile?.role === "platform_admin" &&
+        profile?.organization_id === null;
+
+      setSideMenuStore((current) => ({
+        ...current,
+        menu: isPlatformOwner
+          ? current.platformOwnerMenu
+          : current.ispMenu,
+      }));
+    };
+
+    loadUserMenu();
+  }, [setSideMenuStore]);
   useEffect(() => {
     dom("body").removeClass("error-page").removeClass("login").addClass("main");
     setFormattedMenu(sideMenu());
